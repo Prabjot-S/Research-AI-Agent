@@ -8,12 +8,13 @@ from langchain_core.output_parsers import PydanticOutputParser # Translates LLM 
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from tools import search_tool, wiki_tool, save_file_tool
 
+# Load environment variables from .env file (api keys)
 load_dotenv()
 
 
-# class to specify type of content that llm generates
+# Step 1: Define what structure you want using Pydantic
+# This acts like a form that the LLM must fill out with specific fields (blueprint)
 class ResearchResponse(BaseModel):
-    # blueprint/template - like a form the LLM must fill out
     topic: str
     summary: str
     source : list[str]
@@ -25,18 +26,16 @@ api_key = os.getenv("ANTHROPIC_API_KEY")
 print(f"API Key loaded: {api_key[:10] if api_key else 'NOT FOUND'}...")
 
 
-# setup llm
+# Initialize language models
 llm = ChatOpenAI(model="gpt-4o-mini")
 llm2 = ChatAnthropic(model="claude-3-5-sonnet-20241022")
 
 
-# Parser = the translator that:
-# Tells the LLM "format your answer like ResearchResponse"
-# Converts LLM's text response into Python ResearchResponse object
-
+# Step 2: Create a "translator" that understands this structure (translator)
+# converts LLM text responses into structured Python objects
 parser = PydanticOutputParser(pydantic_object=ResearchResponse)
 
-# creating the prompt
+# creating the prompt that guides ai behavior
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -44,7 +43,7 @@ prompt = ChatPromptTemplate.from_messages(
             "system", # sets the character of llm
             """
             You are a research assistant that will help generate a research paper.
-            Answer the use query and use neccessary tools.
+            Answer the user query and use neccessary tools.
             Wrap the output in this format and provide no other text \n{format_instructions}
             """,
 
@@ -59,25 +58,41 @@ prompt = ChatPromptTemplate.from_messages(
         ("placeholder", "{agent_scratchpad}"),
 
     ]
-).partial(format_instructions=parser.get_format_instructions())
+).partial(format_instructions=parser.get_format_instructions()) #help LLM understand HOW to structure response
+
 
 # creating simple agent
 
+
+# Create the AI agent with access to tools
 tools = [search_tool, wiki_tool, save_file_tool]
 agent = create_tool_calling_agent(
 
-    llm = llm,
-    prompt = prompt,
+    llm = llm, # The brain that decides what to do
+    prompt = prompt, # The instructions that guide the agent
     tools = tools
 
 )
 
+# Create the agent executor that runs the agent and manages tool usage, verbose=true means shows thinking
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose= True)
+
+#gets user input and run research
 query = input("What can I help you research today?\n")
 raw_response = agent_executor.invoke({"query": query})
 
+
+# Try to parse the raw response into a structured format
 try:
     structured_response = parser.parse(raw_response.get("output"))
+    # ↑ This conversion RELIES on Pydantic to ensure data quality, Converts to a Python object that matches ResearchResponse format
+    # through the creation of the object, we can have easy access to specific data
+    
+    # print(f"Topic: {structured_response.topic}")
+    # print(f"Summary: {structured_response.summary}")
+    # print(f"Sources: {', '.join(structured_response.sources)}")
+    # print(f"Tools Used: {', '.join(structured_response.tools_used)}")
+
     print(structured_response)
 except Exception as e:
     print("Error parsing repsonse",e, "Raw Response - ", raw_response)
