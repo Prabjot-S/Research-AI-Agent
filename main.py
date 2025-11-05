@@ -79,12 +79,13 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose= True)
 
 #gets user input and run research
 query = input("What can I help you research today?\n")
-raw_response = agent_executor.invoke({"query": query})
+# invoke --> executes the research with the user's query
+raw_response = agent_executor.invoke({"query": query}) #key matches what your system expects
 
 
 # Try to parse the raw response into a structured format
 try:
-    structured_response = parser.parse(raw_response.get("output"))
+    structured_response = parser.parse(raw_response.get("output")) # ouput is fixed key that LangChain's AgentExecutor uses for final result
     # ↑ This conversion RELIES on Pydantic to ensure data quality, Converts to a Python object that matches ResearchResponse format
     # through the creation of the object, we can have easy access to specific data
     
